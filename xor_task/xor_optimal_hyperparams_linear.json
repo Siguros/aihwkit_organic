@@ -1,0 +1,35 @@
+{
+  "optimal_config": {
+    "network": "3x3x1",
+    "activation": "ReLU",
+    "lr": 0.35,
+    "init_type": "uniform",
+    "init_std": 0.03,
+    "loss": "MSE",
+    "max_epochs": 3000
+  },
+  "final_results": {
+    "success_rate": 100.0,
+    "avg_convergence": 221.6,
+    "std_convergence": 113.27212072409228,
+    "avg_loss": 0.007474156969692558
+  },
+  "device_info": "Linear PiecewiseStepDevice (dw_min=0.002, uniform piecewise, no noise)",
+  "search_time_minutes": 79.10091827313106,
+  "all_100_percent_configs": [
+    {
+      "lr": 0.35,
+      "init_type": "uniform",
+      "init_std": 0.03,
+      "avg_conv": 221.6,
+      "std_conv": 113.27212072409228
+    },
+    {
+      "lr": 0.4,
+      "init_type": "uniform",
+      "init_std": 0.03,
+      "avg_conv": 256.8,
+      "std_conv": 112.20291142984364
+    }
+  ]
+}

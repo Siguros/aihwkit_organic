@@ -1,0 +1,45 @@
+{
+  "w_min": -1.0,
+  "w_max": 1.0,
+  "dw_min": 0.001980896597871794,
+  "gamma_up": -0.16783090588425098,
+  "gamma_down": 0.14102493361528382,
+  "write_noise_std": 0.018202977388733634,
+  "lifetime": 46505.746156307076,
+  "lifetime_dtod": 0.1,
+  "reset": -1.0,
+  "reset_dtod": 0.0,
+  "mult_noise": true,
+  "mean_bound_reference": true,
+  "dw_min_std": 0.3,
+  "dw_min_dtod": 0.1,
+  "w_min_dtod": 0.05,
+  "w_max_dtod": 0.05,
+  "gamma_up_dtod": 0.05,
+  "gamma_down_dtod": 0.05,
+  "_metadata": {
+    "device_type": "LinearStepDevice",
+    "source": "6T1C_result.xlsx",
+    "dt_batch_assumed": 1.0,
+    "physical_tau_sec": 46505.24615462517,
+    "physical_tau_min": 775.0874359104196,
+    "update_metrics": {
+      "r2_up": 0.9991864488209704,
+      "r2_down": 0.9987177438255198,
+      "rmse_up": 0.016022761142503488,
+      "rmse_down": 0.020042060166390277
+    },
+    "retention_metrics": {
+      "r2": 0.9934662085619588,
+      "rmse": 0.013215480327906728
+    },
+    "conductance_range": {
+      "g_min": 81.0,
+      "g_max": 464.0
+    },
+    "avg_pulses_per_cycle": {
+      "up": 1002.3333333333334,
+      "down": 999.3333333333334
+    }
+  }
+}

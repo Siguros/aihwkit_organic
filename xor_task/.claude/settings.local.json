@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(conda info:*)",
+      "Bash(/home/youngwoon/miniconda3/envs/aihwkit/bin/python:*)",
+      "Bash(ls:*)",
+      "Bash(ssh-keygen:*)",
+      "Bash(vessl ssh-key:*)",
+      "Bash(ssh:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

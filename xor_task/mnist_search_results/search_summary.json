@@ -1,0 +1,66 @@
+{
+  "optimal_config": {
+    "lr": 0.2,
+    "step_size": 15,
+    "gamma": 0.7,
+    "init_type": "xavier"
+  },
+  "optimal_results": {
+    "best_val_acc": 95.82000000000001,
+    "final_val_acc": 95.81
+  },
+  "search_time_minutes": 973.851408914725,
+  "total_configs_tested": 144,
+  "top_10": [
+    {
+      "config_name": "LR0.2_Step15_Gamma0.7_Initxavier",
+      "best_val_acc": 95.77,
+      "final_val_acc": 95.77
+    },
+    {
+      "config_name": "LR0.2_Step15_Gamma0.7_Initnormal",
+      "best_val_acc": 95.72,
+      "final_val_acc": 95.72
+    },
+    {
+      "config_name": "LR0.15_Step15_Gamma0.7_Initxavier",
+      "best_val_acc": 95.35,
+      "final_val_acc": 95.24000000000001
+    },
+    {
+      "config_name": "LR0.2_Step10_Gamma0.7_Initxavier",
+      "best_val_acc": 95.3,
+      "final_val_acc": 95.28999999999999
+    },
+    {
+      "config_name": "LR0.2_Step15_Gamma0.5_Initxavier",
+      "best_val_acc": 95.27,
+      "final_val_acc": 95.24000000000001
+    },
+    {
+      "config_name": "LR0.2_Step15_Gamma0.5_Initnormal",
+      "best_val_acc": 95.11,
+      "final_val_acc": 95.11
+    },
+    {
+      "config_name": "LR0.15_Step15_Gamma0.7_Initnormal",
+      "best_val_acc": 95.00999999999999,
+      "final_val_acc": 94.99
+    },
+    {
+      "config_name": "LR0.2_Step10_Gamma0.7_Initnormal",
+      "best_val_acc": 94.99,
+      "final_val_acc": 94.84
+    },
+    {
+      "config_name": "LR0.15_Step15_Gamma0.5_Initxavier",
+      "best_val_acc": 94.78,
+      "final_val_acc": 94.72
+    },
+    {
+      "config_name": "LR0.2_Step15_Gamma0.3_Initxavier",
+      "best_val_acc": 94.69999999999999,
+      "final_val_acc": 94.69999999999999
+    }
+  ]
+}

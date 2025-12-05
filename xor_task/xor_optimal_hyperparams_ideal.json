@@ -1,0 +1,20 @@
+{
+  "optimal_config": {
+    "network": "3x3x1",
+    "activation": "ReLU",
+    "lr": 0.25,
+    "init_type": "uniform",
+    "init_std": 0.03,
+    "loss": "MSE",
+    "max_epochs": 3000
+  },
+  "final_results": {
+    "success_rate": 96.66666666666667,
+    "avg_convergence": 279.9655172413793,
+    "std_convergence": 165.53705341197383,
+    "avg_loss": 0.004775693924878804
+  },
+  "device_info": "IdealDevice (perfect floating-point, no noise)",
+  "search_time_minutes": 75.95817723671595,
+  "all_100_percent_configs": []
+}

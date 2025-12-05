@@ -1,0 +1,21 @@
+{
+  "optimal_config": {
+    "network": "3x3x1",
+    "activation": "ReLU",
+    "lr": 5.0,
+    "init_type": "uniform",
+    "init_std": 0.05,
+    "loss": "MSE",
+    "max_epochs": 5000
+  },
+  "final_results": {
+    "success_rate": 40.0,
+    "avg_convergence": 455.0,
+    "std_convergence": 115.0,
+    "avg_final_loss": 0.003444027155637741
+  },
+  "device_info": {
+    "type": "IdealizedPresetDevice",
+    "dw_min": 0.0002
+  }
+}
