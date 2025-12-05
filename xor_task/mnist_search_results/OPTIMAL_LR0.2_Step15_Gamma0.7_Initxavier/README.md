@@ -172,22 +172,196 @@ t-SNE (t-distributed Stochastic Neighbor Embedding) visualization of learned fea
 | predicted_label | Model's prediction |
 | correct | Boolean: prediction == true_label |
 
-#### How to Interpret:
-1. **Cluster Separation**: Distinct, well-separated clusters = good feature learning
-2. **Cluster Overlap**: Overlapping regions indicate classes the model confuses
-3. **Outliers**: Points far from their cluster centroid may be ambiguous samples
-4. **Color Coding**: Each digit class has unique color
+---
 
-#### t-SNE Parameters Used:
-- **Perplexity**: 30 (balance between local and global structure)
-- **Input**: Final hidden layer activations (128-dimensional)
-- **Output**: 2D visualization
+#### What is t-SNE?
 
-#### What Good Results Look Like:
-- 10 distinct clusters (one per digit)
-- Minimal overlap between clusters
-- Compact, tight clusters
-- Misclassified points typically at cluster boundaries
+**t-SNE (t-distributed Stochastic Neighbor Embedding)** is a nonlinear dimensionality reduction technique developed by Laurens van der Maaten and Geoffrey Hinton (2008). It is specifically designed to visualize high-dimensional data in 2D or 3D space while preserving local structure (nearby points stay nearby).
+
+#### Why Use t-SNE for Neural Network Analysis?
+
+In this experiment, the neural network transforms 784-dimensional input images into increasingly abstract representations:
+```
+Input (784D) → Hidden1 (256D) → Hidden2 (128D) → Output (10D)
+```
+
+The **second hidden layer (128D)** contains the learned feature representations. t-SNE allows us to visualize these 128-dimensional vectors in 2D to understand:
+- How well the network separates different digit classes
+- Which classes are confused (overlap in feature space)
+- The quality of learned representations
+
+---
+
+#### t-SNE Algorithm: Step-by-Step
+
+**Step 1: Compute Pairwise Similarities in High-Dimensional Space**
+
+For each pair of points (xᵢ, xⱼ) in the original 128D space, compute conditional probability:
+
+```
+p(j|i) = exp(-||xᵢ - xⱼ||² / 2σᵢ²) / Σₖ≠ᵢ exp(-||xᵢ - xₖ||² / 2σᵢ²)
+```
+
+This measures "how likely point j is a neighbor of point i" based on Gaussian distribution centered at xᵢ.
+
+**Perplexity** parameter controls σᵢ (effective number of neighbors):
+- Low perplexity (5-10): Focus on very local structure
+- High perplexity (30-50): Consider more global structure
+- **Used in this experiment: Perplexity = 30**
+
+**Step 2: Symmetrize the Probability Distribution**
+
+```
+pᵢⱼ = (p(j|i) + p(i|j)) / 2n
+```
+
+This ensures pᵢⱼ = pⱼᵢ (symmetric similarity).
+
+**Step 3: Initialize Low-Dimensional Embedding**
+
+Randomly initialize 2D coordinates (yᵢ) for each point, typically from a Gaussian distribution with small variance.
+
+**Step 4: Compute Similarities in Low-Dimensional Space**
+
+Use Student's t-distribution (not Gaussian) with 1 degree of freedom:
+
+```
+qᵢⱼ = (1 + ||yᵢ - yⱼ||²)⁻¹ / Σₖ≠ₗ (1 + ||yₖ - yₗ||²)⁻¹
+```
+
+**Why t-distribution?** The heavy tails of t-distribution allow moderate distances in high-D to become larger in low-D, preventing the "crowding problem" where all points collapse to the center.
+
+**Step 5: Minimize KL Divergence via Gradient Descent**
+
+The cost function is the Kullback-Leibler divergence between P and Q:
+
+```
+C = KL(P||Q) = Σᵢⱼ pᵢⱼ log(pᵢⱼ / qᵢⱼ)
+```
+
+The gradient with respect to yᵢ:
+
+```
+∂C/∂yᵢ = 4 Σⱼ (pᵢⱼ - qᵢⱼ)(yᵢ - yⱼ)(1 + ||yᵢ - yⱼ||²)⁻¹
+```
+
+Update rule (with momentum):
+```
+y(t+1) = y(t) + η · ∂C/∂y + α(t) · (y(t) - y(t-1))
+```
+
+**Step 6: Iterate Until Convergence**
+
+Typically 1000 iterations with:
+- Early exaggeration (first 250 iterations): Multiply pᵢⱼ by 4 to form tight clusters
+- Learning rate η typically 100-500
+- Momentum α increases from 0.5 to 0.8
+
+---
+
+#### t-SNE Parameters Used in This Experiment
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| **n_components** | 2 | Output dimensions (2D visualization) |
+| **perplexity** | 30 | Effective number of neighbors |
+| **n_iter** | 1000 | Number of optimization iterations |
+| **learning_rate** | 200 | Gradient descent step size |
+| **init** | 'random' | Random initialization |
+| **random_state** | 42 | For reproducibility |
+
+---
+
+#### Feature Extraction Process
+
+```python
+# Pseudocode for t-SNE feature extraction
+model.eval()
+features = []
+labels = []
+
+for images, targets in test_loader:
+    # Forward pass through first two layers
+    x = images.view(-1, 784)           # Flatten: (batch, 784)
+    x = model[0](x)                     # AnalogLinear: (batch, 256)
+    x = model[1](x)                     # Sigmoid activation
+    x = model[2](x)                     # AnalogLinear: (batch, 128)
+    x = model[3](x)                     # Sigmoid activation
+
+    features.append(x.detach().cpu())   # Extract 128D features
+    labels.append(targets)
+
+# Concatenate all features: (10000, 128)
+all_features = torch.cat(features, dim=0).numpy()
+
+# Apply t-SNE
+from sklearn.manifold import TSNE
+tsne = TSNE(n_components=2, perplexity=30, n_iter=1000, random_state=42)
+tsne_result = tsne.fit_transform(all_features)  # Output: (10000, 2)
+```
+
+---
+
+#### How to Interpret t-SNE Results
+
+1. **Cluster Separation**:
+   - Distinct, well-separated clusters = good feature learning
+   - The network has learned to map different digits to different regions of feature space
+
+2. **Cluster Overlap**:
+   - Overlapping regions indicate classes the model confuses
+   - Example: If 4 and 9 clusters overlap, the model struggles to distinguish them
+
+3. **Cluster Shape**:
+   - Compact, tight clusters = consistent representations
+   - Spread-out clusters = high intra-class variability
+
+4. **Outliers**:
+   - Points far from their cluster centroid may be:
+     - Ambiguous/noisy samples
+     - Misclassified samples
+     - Samples with unusual writing styles
+
+5. **Color Coding**:
+   - Each digit class (0-9) has unique color
+   - Misclassified points can be highlighted differently
+
+---
+
+#### What Good Results Look Like
+
+- **10 distinct clusters** (one per digit)
+- **Minimal overlap** between clusters
+- **Compact, tight clusters** with low dispersion
+- **Clear boundaries** between neighboring clusters
+- **Misclassified points** typically at cluster boundaries or in overlap regions
+
+---
+
+#### Limitations of t-SNE
+
+1. **Non-convex optimization**: Different random seeds may produce different layouts
+2. **Not preserving global structure**: Distances between clusters are not meaningful
+3. **Perplexity sensitivity**: Results can vary with perplexity choice
+4. **Computational cost**: O(n²) complexity, slow for large datasets
+5. **Not suitable for new data**: Cannot project new points without re-running
+
+---
+
+#### Comparison with Other Methods
+
+| Method | Preserves | Speed | Use Case |
+|--------|-----------|-------|----------|
+| **PCA** | Global variance | Fast | Linear relationships |
+| **t-SNE** | Local structure | Slow | Cluster visualization |
+| **UMAP** | Local + some global | Fast | General purpose |
+
+---
+
+#### References
+
+- van der Maaten, L., & Hinton, G. (2008). "Visualizing Data using t-SNE". *Journal of Machine Learning Research*, 9, 2579-2605.
+- Wattenberg, M., et al. (2016). "How to Use t-SNE Effectively". *Distill*. https://distill.pub/2016/misread-tsne/
 
 ---
 
