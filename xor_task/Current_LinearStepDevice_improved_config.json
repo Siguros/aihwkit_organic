@@ -1,0 +1,21 @@
+{
+  "w_min": -1.077085431641855,
+  "w_max": 1.0121126196632688,
+  "dw_min": 0.002155805967963133,
+  "gamma_up": 0.4149166572653464,
+  "gamma_down": 0.4623126949795902,
+  "write_noise_std": 0.05516959932906116,
+  "_metadata": {
+    "device_type": "LinearStepDevice_Improved",
+    "source": "Current.xlsx",
+    "n_cycles_fitted": 10,
+    "update_metrics": {
+      "r2_up": 0.9966669139971296,
+      "r2_down": 0.9858423222509959,
+      "r2_up_std": 0.0007755771671770341,
+      "r2_down_std": 0.005904359807843451,
+      "rmse_up": 0.033721043361217194,
+      "rmse_down": 0.06914732411082651
+    }
+  }
+}

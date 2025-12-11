@@ -1,0 +1,34 @@
+{
+  "w_min": -1.0,
+  "w_max": 1.0,
+  "dw_min": 0.002240581058239391,
+  "gamma_up": 0.4783996813794951,
+  "gamma_down": 0.5365531730095519,
+  "write_noise_std": 0.04092590326183556,
+  "mult_noise": true,
+  "mean_bound_reference": true,
+  "dw_min_std": 0.3,
+  "dw_min_dtod": 0.1,
+  "w_min_dtod": 0.05,
+  "w_max_dtod": 0.05,
+  "gamma_up_dtod": 0.05,
+  "gamma_down_dtod": 0.05,
+  "_metadata": {
+    "device_type": "LinearStepDevice",
+    "source": "Current.xlsx",
+    "update_metrics": {
+      "r2_up": 0.9964587947908775,
+      "r2_down": 0.9942718140142587,
+      "rmse_up": 0.03553482277942183,
+      "rmse_down": 0.043918708325591256
+    },
+    "current_range": {
+      "min": 9.67741935483871e-07,
+      "max": 4.4574780058651025e-06
+    },
+    "avg_pulses_per_cycle": {
+      "up": 1027.6666666666667,
+      "down": 997.0
+    }
+  }
+}

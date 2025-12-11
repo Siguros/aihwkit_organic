@@ -1,0 +1,4 @@
+Method,dw_min,gamma_up,gamma_down,R²_UP,R²_DOWN
+Basic (3 cycles),0.002241,0.4784,0.5366,0.9965,0.9943
+Improved (10 cycles),0.002156,0.4149,0.4623,0.9967,0.9858
+With Variation (10 cycles individual),0.002170 ± 0.000074,0.4230 ± 0.0483,0.4469 ± 0.0872,0.9981 ± 0.0005,0.9936 ± 0.0028
