@@ -4,9 +4,9 @@
 #
 # Licensed under the MIT license. See LICENSE file in the project root for details.
 
-"""aihwkit baseline: ResNet18 CNN with CIFAR10 using Fitted LinearStepDevice.
+"""aihwkit baseline: ResNet10 CNN with CIFAR10 using Fitted LinearStepDevice.
 
-CIFAR10 dataset on a ResNet18 network with configurable digital (FloatingPoint)
+CIFAR10 dataset on a ResNet10 network with configurable digital (FloatingPoint)
 and analog (LinearStepDevice) layers. Uses fitted device from Current_LinearStepDevice_with_variation_config.json.
 """
 # pylint: disable=invalid-name
@@ -55,7 +55,7 @@ DEVICE = device("cuda" if USE_CUDA else "cpu")
 PATH_DATASET = os.path.join(os.getcwd(), "data", "DATASET")
 
 # Experiment configuration
-CONFIG_NAME = "all_analog_mac"  # Configuration identifier for this experiment
+CONFIG_NAME = "Resnet10_All_analog_channel_64"  # Configuration identifier for this experiment
 EXPERIMENT_NAME = "with_noise"  # Options: "with_noise", "no_write_noise"
 
 # Path to store results
@@ -68,7 +68,7 @@ WEIGHT_PATH = None  # Will be set dynamically
 SEED = 1
 N_EPOCHS = 300
 BATCH_SIZE = 128
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.05
 MOMENTUM = 0.9  # SGD momentum
 WEIGHT_DECAY = 0.0005  # L2 regularization
 NESTEROV = True  # Nesterov momentum
@@ -110,60 +110,44 @@ print(f"{'='*60}\n")
 # Set which layers use analog vs digital (FloatingPoint)
 # Options: 'analog' (trainable base), 'digital' (FloatingPoint)
 #
-# ResNet18 structure:
+# ResNet10 structure:
 # - conv1: First 3x3 conv layer
-# - layer1: 2 blocks, NO downsample (64 -> 64 channels)
-# - layer2: 2 blocks, downsample in block0 (64 -> 128 channels)
-# - layer3: 2 blocks, downsample in block0 (128 -> 256 channels)
-# - layer4: 2 blocks, downsample in block0 (256 -> 512 channels)
+# - layer1: 1 block, NO downsample (64 -> 64 channels)
+# - layer2: 1 block, downsample in block0 (64 -> 128 channels)
+# - layer3: 1 block, downsample in block0 (128 -> 256 channels)
+# - layer4: 1 block, downsample in block0 (256 -> 512 channels)
 # - fc: Final fully connected layer
 LAYER_CONFIG = {
-    'conv1': 'digital',           # First convolutional layer (DIGITAL - Input)
+    'conv1': 'digital',           # First convolutional layer (Input - digital)
 
-    # Layer1 (2 blocks, no downsample) - ALL ANALOG
+    # Layer1 (1 block, no downsample)
     'layer1_block0': {
         'conv1': 'analog',
         'conv2': 'analog',
     },
-    'layer1_block1': {
-        'conv1': 'analog',
-        'conv2': 'analog',
-    },
 
-    # Layer2 (2 blocks, downsample in block0) - ANALOG except downsample
+    # Layer2 (1 block, downsample in block0)
     'layer2_block0': {
         'conv1': 'analog',
         'conv2': 'analog',
-        'downsample': 'digital',  # Downsample stays digital
-    },
-    'layer2_block1': {
-        'conv1': 'analog',
-        'conv2': 'analog',
+        'downsample': 'digital',
     },
 
-    # Layer3 (2 blocks, downsample in block0) - ANALOG except downsample
+    # Layer3 (1 block, downsample in block0)
     'layer3_block0': {
         'conv1': 'analog',
         'conv2': 'analog',
-        'downsample': 'digital',  # Downsample stays digital
-    },
-    'layer3_block1': {
-        'conv1': 'analog',
-        'conv2': 'analog',
+        'downsample': 'digital',
     },
 
-    # Layer4 (2 blocks, downsample in block0) - ANALOG except downsample
+    # Layer4 (1 block, downsample in block0)
     'layer4_block0': {
         'conv1': 'analog',
         'conv2': 'analog',
-        'downsample': 'digital',  # Downsample stays digital
-    },
-    'layer4_block1': {
-        'conv1': 'analog',
-        'conv2': 'analog',
+        'downsample': 'digital',
     },
 
-    'fc': 'digital',              # Final fully connected layer (DIGITAL - Output)
+    'fc': 'digital',              # Final fully connected layer (digital)
 }
 
 
@@ -308,14 +292,14 @@ def concatenate_layer_blocks_baseline(in_ch, hidden_ch, num_layer, first_layer=F
 
 
 def create_model():
-    """ResNet18 model with configurable digital/analog layers.
+    """ResNet10 model with configurable digital/analog layers.
 
     Returns:
        nn.Module: created model
     """
 
-    block_per_layers = (2, 2, 2, 2)  # ResNet18 structure
-    base_channel = 64  # Standard ResNet18 channel size
+    block_per_layers = (1, 1, 1, 1)  # ResNet10 structure (1 block per layer)
+    base_channel = 64  # Standard ResNet10 channels
     channel = (base_channel, 2 * base_channel, 4 * base_channel, 8 * base_channel)  # (64, 128, 256, 512)
 
     # Input layer - use configuration from LAYER_CONFIG
@@ -339,47 +323,43 @@ def create_model():
     )
 
     # Residual blocks - use per-block configuration from LAYER_CONFIG
-    # Layer1 (2 blocks, no downsample)
+    # Layer1 (1 block, no downsample)
     l1 = nn.Sequential(
         *concatenate_layer_blocks_baseline(
             channel[0], channel[0], block_per_layers[0],
             first_layer=True,
             block_configs=[
                 LAYER_CONFIG['layer1_block0'],
-                LAYER_CONFIG['layer1_block1'],
             ]
         )
     )
 
-    # Layer2 (2 blocks, downsample in block0)
+    # Layer2 (1 block, downsample in block0)
     l2 = nn.Sequential(
         *concatenate_layer_blocks_baseline(
             channel[0], channel[1], block_per_layers[1],
             block_configs=[
                 LAYER_CONFIG['layer2_block0'],
-                LAYER_CONFIG['layer2_block1'],
             ]
         )
     )
 
-    # Layer3 (2 blocks, downsample in block0)
+    # Layer3 (1 block, downsample in block0)
     l3 = nn.Sequential(
         *concatenate_layer_blocks_baseline(
             channel[1], channel[2], block_per_layers[2],
             block_configs=[
                 LAYER_CONFIG['layer3_block0'],
-                LAYER_CONFIG['layer3_block1'],
             ]
         )
     )
 
-    # Layer4 (2 blocks, downsample in block0)
+    # Layer4 (1 block, downsample in block0)
     l4_conv = nn.Sequential(
         *concatenate_layer_blocks_baseline(
             channel[2], channel[3], block_per_layers[3],
             block_configs=[
                 LAYER_CONFIG['layer4_block0'],
-                LAYER_CONFIG['layer4_block1'],
             ]
         )
     )
@@ -415,21 +395,19 @@ def create_model():
                 parts.append(f"{conv_type}={'A' if config[conv_type] == 'analog' else 'D'}")
         return f"{block_name}: {', '.join(parts)}"
 
-    print(f"\nCreated ResNet18 with per-block analog/digital layer configuration:")
+    print(f"\nCreated ResNet10 with per-block analog/digital layer configuration:")
+    print(f"  Base channels: {base_channel} (All-Analog MAC configuration)")
+    print(f"  Channel progression: {channel[0]} -> {channel[1]} -> {channel[2]} -> {channel[3]}")
     print(f"  Analog device type: LinearStepDevice (fitted from Current_LinearStepDevice_with_variation_config.json)")
     print(f"  conv1: {'Analog (trainable base)' if input_use_analog else 'Digital (FloatingPoint)'}")
     print(f"  Layer1:")
     print(f"    {format_block_config('layer1_block0')}")
-    print(f"    {format_block_config('layer1_block1')}")
     print(f"  Layer2:")
     print(f"    {format_block_config('layer2_block0')}")
-    print(f"    {format_block_config('layer2_block1')}")
     print(f"  Layer3:")
     print(f"    {format_block_config('layer3_block0')}")
-    print(f"    {format_block_config('layer3_block1')}")
     print(f"  Layer4:")
     print(f"    {format_block_config('layer4_block0')}")
-    print(f"    {format_block_config('layer4_block1')}")
     print(f"  fc: {'Analog (trainable base)' if fc_use_analog else 'Digital (FloatingPoint)'}")
     print(f"  Using random initialization (no pretrained weights)\n")
 
@@ -442,7 +420,7 @@ def create_model():
 def initialize_resnet_weights(model):
     """Apply PyTorch ResNet-style kaiming_normal initialization to all layers.
 
-    This ensures the initialization matches standard PyTorch ResNet18 behavior
+    This ensures the initialization matches standard PyTorch ResNet10 behavior
     for consistent results across different implementations.
 
     Args:
@@ -717,7 +695,7 @@ def apply_warmup_cosine_lr(optimizer, epoch, total_epochs, base_lr, warmup_ratio
 
 
 def main():
-    """Train a PyTorch ResNet model with mixed analog/digital to classify CIFAR10."""
+    """Train a PyTorch ResNet10 model with mixed analog/digital to classify CIFAR10."""
     # Seed
     manual_seed(SEED)
 
@@ -891,7 +869,7 @@ def main():
         axes[1, 1].set_title('Generalization Gap')
         axes[1, 1].grid(True, alpha=0.3)
 
-        plt.suptitle(f'Fitted LinearStepDevice ResNet18 CIFAR10 ({N_EPOCHS} epochs) - {EXPERIMENT_NAME}\n'
+        plt.suptitle(f'Fitted LinearStepDevice ResNet10 CIFAR10 ({N_EPOCHS} epochs) - {EXPERIMENT_NAME}\n'
                      f'Best Val Acc: {best_accuracy:.2f}% @ Epoch {best_epoch + 1}', fontsize=14)
         plt.tight_layout()
 
@@ -981,7 +959,7 @@ def main():
         cbar2 = plt.colorbar(scatter2, ax=axes[1], ticks=range(10))
         cbar2.ax.set_yticklabels(class_names)
 
-        plt.suptitle(f'Feature Embeddings - Fitted Device ResNet18 - {EXPERIMENT_NAME}\nVal Acc: {best_accuracy:.2f}%', fontsize=14)
+        plt.suptitle(f'Feature Embeddings - Fitted Device ResNet10 - {EXPERIMENT_NAME}\nVal Acc: {best_accuracy:.2f}%', fontsize=14)
         plt.tight_layout()
 
         tsne_path = os.path.join(RESULTS, f"{CONFIG_NAME}_tsne_analysis_lr{LEARNING_RATE}_{N_EPOCHS}epoch_{EXPERIMENT_NAME}.png")
@@ -1010,7 +988,7 @@ def main():
         axes[1].set_xlabel('Predicted')
         axes[1].set_ylabel('True')
 
-        plt.suptitle(f'Confusion Matrix - Fitted Device ResNet18 - {EXPERIMENT_NAME}\nVal Acc: {best_accuracy:.2f}%', fontsize=14)
+        plt.suptitle(f'Confusion Matrix - Fitted Device ResNet10 - {EXPERIMENT_NAME}\nVal Acc: {best_accuracy:.2f}%', fontsize=14)
         plt.tight_layout()
 
         cm_path = os.path.join(RESULTS, f"{CONFIG_NAME}_confusion_matrix_lr{LEARNING_RATE}_{N_EPOCHS}epoch_{EXPERIMENT_NAME}.png")
@@ -1045,7 +1023,13 @@ def main():
         # Summary report
         summary = {
             'experiment_name': EXPERIMENT_NAME,
-            'experiment': f'Fitted LinearStepDevice ResNet18 CIFAR10 - {EXPERIMENT_NAME}',
+            'experiment': f'Fitted LinearStepDevice ResNet10 CIFAR10 - {EXPERIMENT_NAME}',
+            'architecture': {
+                'model': 'ResNet10',
+                'base_channel': 64,
+                'channel_progression': '64 -> 128 -> 256 -> 512',
+                'blocks_per_layer': [1, 1, 1, 1],
+            },
             'epochs': N_EPOCHS,
             'best_val_accuracy': best_accuracy,
             'best_epoch': best_epoch + 1,
@@ -1070,7 +1054,7 @@ def main():
             'per_class_accuracy': {name: float(acc) for name, acc in zip(class_names, per_class_acc)}
         }
 
-        summary_path = os.path.join(RESULTS, f"experiment_summary_{N_EPOCHS}epoch_{EXPERIMENT_NAME}.json")
+        summary_path = os.path.join(RESULTS, f"resnet10_experiment_summary_{N_EPOCHS}epoch_{EXPERIMENT_NAME}.json")
         with open(summary_path, 'w') as f:
             json.dump(summary, f, indent=2)
         print(f"✓ Experiment summary saved to: {summary_path}")

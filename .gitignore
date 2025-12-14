@@ -164,3 +164,14 @@ cython_debug/
 \#*\#
 .\#*
 *~
+
+# Model weights and checkpoints
+*.pth
+*.ckpt
+*.zip
+
+# Results and outputs
+*.csv
+*.png
+*.xlsx
+results/

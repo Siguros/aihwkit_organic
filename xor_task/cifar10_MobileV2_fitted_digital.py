@@ -4,9 +4,9 @@
 #
 # Licensed under the MIT license. See LICENSE file in the project root for details.
 
-"""aihwkit baseline: ResNet18 CNN with CIFAR10 using Fitted LinearStepDevice.
+"""aihwkit baseline: MobileNetV2 CNN with CIFAR10 using Fitted LinearStepDevice.
 
-CIFAR10 dataset on a ResNet18 network with configurable digital (FloatingPoint)
+CIFAR10 dataset on a MobileNetV2 network with configurable digital (FloatingPoint)
 and analog (LinearStepDevice) layers. Uses fitted device from Current_LinearStepDevice_with_variation_config.json.
 """
 # pylint: disable=invalid-name
@@ -55,11 +55,11 @@ DEVICE = device("cuda" if USE_CUDA else "cpu")
 PATH_DATASET = os.path.join(os.getcwd(), "data", "DATASET")
 
 # Experiment configuration
-CONFIG_NAME = "all_analog_mac"  # Configuration identifier for this experiment
+CONFIG_NAME = "MobileNetV2_AllAnalog_except_IO"  # Configuration identifier for this experiment
 EXPERIMENT_NAME = "with_noise"  # Options: "with_noise", "no_write_noise"
 
 # Path to store results
-RESULTS = os.path.join(os.getcwd(), "results", f"RESNET_{CONFIG_NAME}_300EPOCH_{EXPERIMENT_NAME}")
+RESULTS = os.path.join(os.getcwd(), "results", f"MOBILENETV2_{CONFIG_NAME}_300EPOCH_{EXPERIMENT_NAME}")
 os.makedirs(RESULTS, exist_ok=True)
 # Note: WEIGHT_PATH will be set in main() based on N_EPOCHS
 WEIGHT_PATH = None  # Will be set dynamically
@@ -68,7 +68,7 @@ WEIGHT_PATH = None  # Will be set dynamically
 SEED = 1
 N_EPOCHS = 300
 BATCH_SIZE = 128
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.05
 MOMENTUM = 0.9  # SGD momentum
 WEIGHT_DECAY = 0.0005  # L2 regularization
 NESTEROV = True  # Nesterov momentum
@@ -106,66 +106,6 @@ print(f"    gamma_up_dtod: {device_config.get('gamma_up_dtod', 'N/A'):.6f}")
 print(f"    gamma_down_dtod: {device_config.get('gamma_down_dtod', 'N/A'):.6f}")
 print(f"{'='*60}\n")
 
-# Layer-wise digital/analog configuration
-# Set which layers use analog vs digital (FloatingPoint)
-# Options: 'analog' (trainable base), 'digital' (FloatingPoint)
-#
-# ResNet18 structure:
-# - conv1: First 3x3 conv layer
-# - layer1: 2 blocks, NO downsample (64 -> 64 channels)
-# - layer2: 2 blocks, downsample in block0 (64 -> 128 channels)
-# - layer3: 2 blocks, downsample in block0 (128 -> 256 channels)
-# - layer4: 2 blocks, downsample in block0 (256 -> 512 channels)
-# - fc: Final fully connected layer
-LAYER_CONFIG = {
-    'conv1': 'digital',           # First convolutional layer (DIGITAL - Input)
-
-    # Layer1 (2 blocks, no downsample) - ALL ANALOG
-    'layer1_block0': {
-        'conv1': 'analog',
-        'conv2': 'analog',
-    },
-    'layer1_block1': {
-        'conv1': 'analog',
-        'conv2': 'analog',
-    },
-
-    # Layer2 (2 blocks, downsample in block0) - ANALOG except downsample
-    'layer2_block0': {
-        'conv1': 'analog',
-        'conv2': 'analog',
-        'downsample': 'digital',  # Downsample stays digital
-    },
-    'layer2_block1': {
-        'conv1': 'analog',
-        'conv2': 'analog',
-    },
-
-    # Layer3 (2 blocks, downsample in block0) - ANALOG except downsample
-    'layer3_block0': {
-        'conv1': 'analog',
-        'conv2': 'analog',
-        'downsample': 'digital',  # Downsample stays digital
-    },
-    'layer3_block1': {
-        'conv1': 'analog',
-        'conv2': 'analog',
-    },
-
-    # Layer4 (2 blocks, downsample in block0) - ANALOG except downsample
-    'layer4_block0': {
-        'conv1': 'analog',
-        'conv2': 'analog',
-        'downsample': 'digital',  # Downsample stays digital
-    },
-    'layer4_block1': {
-        'conv1': 'analog',
-        'conv2': 'analog',
-    },
-
-    'fc': 'digital',              # Final fully connected layer (DIGITAL - Output)
-}
-
 
 def create_analog_config():
     """Create analog configuration using fitted LinearStepDevice.
@@ -191,336 +131,220 @@ def create_analog_config():
     return config
 
 
-class ResidualBlockBaseline(nn.Module):
-    """Residual block with configurable digital/analog convolutional layers."""
+class ConvBNActivationAnalog(nn.Module):
+    """AnalogConv2d(+groups) + BN + optional Activation.
+       If use_analog=False -> FloatingPointRPUConfig for digital operation."""
 
-    def __init__(self, in_ch, hidden_ch, use_conv=False, stride=1,
-                 use_analog_conv1=False, use_analog_conv2=False, use_analog_convskip=False):
+    def __init__(self, in_ch, out_ch, kernel_size, stride=1, groups=1,
+                 activation=True, use_analog=True):
         super().__init__()
-
-        # Conv1 configuration
-        if use_analog_conv1:
-            rpu_config_conv1 = create_analog_config()
-            bias_conv1 = False  # Standard ResNet: no bias in Conv (BatchNorm handles it)
-        else:
-            rpu_config_conv1 = FloatingPointRPUConfig()
-            bias_conv1 = False  # Standard ResNet: no bias in Conv (BatchNorm handles it)
-
-        # Conv2 configuration
-        if use_analog_conv2:
-            rpu_config_conv2 = create_analog_config()
-            bias_conv2 = False
-        else:
-            rpu_config_conv2 = FloatingPointRPUConfig()
-            bias_conv2 = False
-
-        # Convskip configuration
-        if use_analog_convskip:
-            rpu_config_convskip = create_analog_config()
-            bias_convskip = False
-        else:
-            rpu_config_convskip = FloatingPointRPUConfig()
-            bias_convskip = False
-
-        # Build layers with individual configurations
-        self.conv1 = AnalogConv2d(
-            in_ch, hidden_ch,
-            kernel_size=3, padding=1, stride=stride,
-            bias=bias_conv1,
-            rpu_config=rpu_config_conv1
-        )
-        self.bn1 = nn.BatchNorm2d(hidden_ch)
-
-        self.conv2 = AnalogConv2d(
-            hidden_ch, hidden_ch,
-            kernel_size=3, padding=1,
-            bias=bias_conv2,
-            rpu_config=rpu_config_conv2
-        )
-        self.bn2 = nn.BatchNorm2d(hidden_ch)
-
-        if use_conv:
-            self.convskip = AnalogConv2d(
-                in_ch, hidden_ch,
-                kernel_size=1, stride=stride,
-                bias=bias_convskip,
-                rpu_config=rpu_config_convskip
-            )
-            self.bn_skip = nn.BatchNorm2d(hidden_ch)
-        else:
-            self.convskip = None
-            self.bn_skip = None
+        padding = kernel_size // 2
+        rpu_cfg = create_analog_config() if use_analog else FloatingPointRPUConfig()
+        self.conv = AnalogConv2d(in_ch, out_ch,
+                                 kernel_size=kernel_size, stride=stride,
+                                 padding=padding, groups=groups,
+                                 bias=False, rpu_config=rpu_cfg)
+        self.bn = nn.BatchNorm2d(out_ch)
+        self.act = nn.ReLU6(inplace=True) if activation else nn.Identity()
 
     def forward(self, x):
-        """Forward pass"""
-        y = F.relu(self.bn1(self.conv1(x)))
-        y = self.bn2(self.conv2(y))
-        if self.convskip:
-            x = self.bn_skip(self.convskip(x))
-        y += x
-        return F.relu(y)
+        return self.act(self.bn(self.conv(x)))
 
 
-def concatenate_layer_blocks_baseline(in_ch, hidden_ch, num_layer, first_layer=False,
-                                  block_configs=None):
-    """Concatenate multiple residual blocks to form a layer.
+class InvertedResidualAnalog(nn.Module):
+    """MobileNetV2 inverted residual with linear bottleneck."""
 
-    Args:
-        in_ch: Input channels
-        hidden_ch: Hidden channels
-        num_layer: Number of residual blocks
-        first_layer: Whether this is the first layer
-        block_configs: List of config dicts for each block, each containing:
-                      {'conv1': 'analog'/'digital', 'conv2': 'analog'/'digital',
-                       'downsample': 'analog'/'digital' (optional)}
+    def __init__(self, in_ch, out_ch, stride, expand_ratio,
+                 all_analog=True):
+        super().__init__()
+        assert stride in [1, 2]
+        hidden_dim = int(round(in_ch * expand_ratio))
+        self.use_res_connect = (stride == 1 and in_ch == out_ch)
 
-    Returns:
-       List: list of layer blocks
-    """
-    if block_configs is None:
-        # Default: all digital
-        block_configs = [{'conv1': 'digital', 'conv2': 'digital', 'downsample': 'digital'}] * num_layer
+        # All internal conv layers are analog (requirement), only stem/classifier are digital
+        use_analog = all_analog
 
-    layers = []
-    for i in range(num_layer):
-        config = block_configs[i]
-        use_analog_conv1 = (config['conv1'] == 'analog')
-        use_analog_conv2 = (config['conv2'] == 'analog')
-        use_analog_downsample = (config.get('downsample', 'digital') == 'analog')
-
-        if i == 0 and not first_layer:
-            # First block with downsampling
-            layers.append(ResidualBlockBaseline(
-                in_ch, hidden_ch, use_conv=True, stride=2,
-                use_analog_conv1=use_analog_conv1,
-                use_analog_conv2=use_analog_conv2,
-                use_analog_convskip=use_analog_downsample
-            ))
+        layers = []
+        # 1) Expansion 1x1 (only if expand_ratio != 1)
+        if expand_ratio != 1:
+            layers.append(ConvBNActivationAnalog(in_ch, hidden_dim, 1,
+                                                 activation=True,
+                                                 use_analog=use_analog))
         else:
-            # Other blocks without downsampling
-            layers.append(ResidualBlockBaseline(
-                hidden_ch, hidden_ch,
-                use_analog_conv1=use_analog_conv1,
-                use_analog_conv2=use_analog_conv2,
-                use_analog_convskip=use_analog_conv1  # Not used, but kept for consistency
-            ))
-    return layers
+            hidden_dim = in_ch
+
+        # 2) Depthwise 3x3
+        layers.append(ConvBNActivationAnalog(hidden_dim, hidden_dim, 3, stride=stride,
+                                             groups=hidden_dim, activation=True,
+                                             use_analog=use_analog))  # depthwise
+
+        # 3) Projection 1x1 (linear bottleneck: activation=False)
+        layers.append(ConvBNActivationAnalog(hidden_dim, out_ch, 1,
+                                             activation=False,
+                                             use_analog=use_analog))
+        self.block = nn.Sequential(*layers)
+
+    def forward(self, x):
+        out = self.block(x)
+        if self.use_res_connect:
+            out = out + x
+        return out
 
 
-def create_model():
-    """ResNet18 model with configurable digital/analog layers.
+def _make_divisible(v, divisor=8, min_value=None):
+    """Make channels divisible by divisor for efficient hardware."""
+    if min_value is None:
+        min_value = divisor
+    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
+    if new_v < 0.9 * v:
+        new_v += divisor
+    return new_v
 
+
+def create_model(width_mult: float = 1.0):
+    """
+    MobileNetV2 for CIFAR-10 with:
+      - stem (input) digital
+      - all bottleneck blocks analog (expand/dw/proj)
+      - final 1x1 conv analog
+      - classifier (output) digital
     Returns:
-       nn.Module: created model
+        nn.Module
     """
 
-    block_per_layers = (2, 2, 2, 2)  # ResNet18 structure
-    base_channel = 64  # Standard ResNet18 channel size
-    channel = (base_channel, 2 * base_channel, 4 * base_channel, 8 * base_channel)  # (64, 128, 256, 512)
+    # ---- Layer policy: input/output digital, others analog ----
+    STEM_IS_ANALOG = False
+    BLOCKS_ARE_ANALOG = True
+    LAST_CONV_IS_ANALOG = True
+    CLASSIFIER_IS_ANALOG = False  # output layer is digital
 
-    # Input layer - use configuration from LAYER_CONFIG
-    input_use_analog = (LAYER_CONFIG['conv1'] == 'analog')
-    if input_use_analog:
-        input_rpu_config = create_analog_config()
-        input_bias = False  # Standard ResNet: no bias in Conv (BatchNorm handles it)
+    # ---- CIFAR-10 standard configuration (stride adjusted) ----
+    # (t, c, n, s)
+    inverted_residual_setting = [
+        (1,  16, 1, 1),
+        (6,  24, 2, 1),
+        (6,  32, 3, 2),
+        (6,  64, 4, 2),
+        (6,  96, 3, 1),
+        (6, 160, 3, 2),
+        (6, 320, 1, 1),
+    ]
+
+    input_channel = _make_divisible(32 * width_mult, 8)   # stem out
+    last_channel  = _make_divisible(1280 * max(1.0, width_mult), 8)
+
+    # ---------- l0: stem (digital) ----------
+    l0_stem = nn.Sequential(
+        ConvBNActivationAnalog(3, input_channel, kernel_size=3, stride=1,
+                               activation=True, use_analog=STEM_IS_ANALOG)  # stride=1 for CIFAR-10
+    )
+
+    # Helper to build stages
+    def make_stage(cfg_list, in_ch):
+        layers = []
+        cur_in = in_ch
+        for (t, c, n, s) in cfg_list:
+            out_ch = _make_divisible(c * width_mult, 8)
+            for i in range(n):
+                stride = s if i == 0 else 1
+                layers.append(InvertedResidualAnalog(
+                    cur_in, out_ch, stride=stride, expand_ratio=t,
+                    all_analog=BLOCKS_ARE_ANALOG
+                ))
+                cur_in = out_ch
+        return nn.Sequential(*layers), cur_in
+
+    # ---------- l1, l2, l3: bottleneck stages (all analog) ----------
+    # Grouped into 3 parts for hook compatibility
+    l1_cfg = inverted_residual_setting[0:2]   # up to c=24
+    l2_cfg = inverted_residual_setting[2:4]   # c=32..64
+    l3_cfg = inverted_residual_setting[4:7]   # c=96..320
+
+    l1_stage, ch_after_l1 = make_stage(l1_cfg, input_channel)
+    l2_stage, ch_after_l2 = make_stage(l2_cfg, ch_after_l1)
+    l3_stage, ch_after_l3 = make_stage(l3_cfg, ch_after_l2)
+
+    # ---------- l4: last 1x1 conv to 1280 (analog) ----------
+    l4_lastconv = nn.Sequential(
+        ConvBNActivationAnalog(ch_after_l3, last_channel, kernel_size=1,
+                               activation=True, use_analog=LAST_CONV_IS_ANALOG)
+    )
+
+    # ---------- l5: classifier (digital) ----------
+    if CLASSIFIER_IS_ANALOG:
+        fc_rpu = create_analog_config()
     else:
-        input_rpu_config = FloatingPointRPUConfig()
-        input_bias = False  # Standard ResNet: no bias in Conv (BatchNorm handles it)
-
-    l0 = nn.Sequential(
-        AnalogConv2d(
-            3, channel[0],
-            kernel_size=3, stride=1, padding=1,
-            bias=input_bias,
-            rpu_config=input_rpu_config
-        ),
-        nn.BatchNorm2d(channel[0]),
-        nn.ReLU(),
-    )
-
-    # Residual blocks - use per-block configuration from LAYER_CONFIG
-    # Layer1 (2 blocks, no downsample)
-    l1 = nn.Sequential(
-        *concatenate_layer_blocks_baseline(
-            channel[0], channel[0], block_per_layers[0],
-            first_layer=True,
-            block_configs=[
-                LAYER_CONFIG['layer1_block0'],
-                LAYER_CONFIG['layer1_block1'],
-            ]
-        )
-    )
-
-    # Layer2 (2 blocks, downsample in block0)
-    l2 = nn.Sequential(
-        *concatenate_layer_blocks_baseline(
-            channel[0], channel[1], block_per_layers[1],
-            block_configs=[
-                LAYER_CONFIG['layer2_block0'],
-                LAYER_CONFIG['layer2_block1'],
-            ]
-        )
-    )
-
-    # Layer3 (2 blocks, downsample in block0)
-    l3 = nn.Sequential(
-        *concatenate_layer_blocks_baseline(
-            channel[1], channel[2], block_per_layers[2],
-            block_configs=[
-                LAYER_CONFIG['layer3_block0'],
-                LAYER_CONFIG['layer3_block1'],
-            ]
-        )
-    )
-
-    # Layer4 (2 blocks, downsample in block0)
-    l4_conv = nn.Sequential(
-        *concatenate_layer_blocks_baseline(
-            channel[2], channel[3], block_per_layers[3],
-            block_configs=[
-                LAYER_CONFIG['layer4_block0'],
-                LAYER_CONFIG['layer4_block1'],
-            ]
-        )
-    )
-
-    # Final classification layer - use configuration from LAYER_CONFIG
-    fc_use_analog = (LAYER_CONFIG['fc'] == 'analog')
-    if fc_use_analog:
-        fc_rpu_config = create_analog_config()
-        fc_bias = True
-    else:
-        fc_rpu_config = FloatingPointRPUConfig()
-        fc_bias = True
+        fc_rpu = FloatingPointRPUConfig()
 
     l5_fc = nn.Sequential(
         nn.AdaptiveAvgPool2d((1, 1)),
         nn.Flatten(),
-        AnalogLinear(
-            channel[3], N_CLASSES,  # 512 -> 10 for CIFAR-10
-            bias=fc_bias,
-            rpu_config=fc_rpu_config
-        )
+        AnalogLinear(last_channel, N_CLASSES, bias=True, rpu_config=fc_rpu)
     )
 
-    model = nn.Sequential(l0, l1, l2, l3, l4_conv, l5_fc)
+    model = nn.Sequential(l0_stem, l1_stage, l2_stage, l3_stage, l4_lastconv, l5_fc)
 
-    # Print configuration summary
-    def format_block_config(block_name):
-        """Format block configuration for printing"""
-        config = LAYER_CONFIG[block_name]
-        parts = []
-        for conv_type in ['conv1', 'conv2', 'downsample']:
-            if conv_type in config:
-                parts.append(f"{conv_type}={'A' if config[conv_type] == 'analog' else 'D'}")
-        return f"{block_name}: {', '.join(parts)}"
+    # Summary output
+    print("\nCreated MobileNetV2 (CIFAR-10) with mixed digital/analog:")
+    print(f"  Stem: {'Analog' if STEM_IS_ANALOG else 'Digital'}")
+    print("  Bottlenecks: Analog (expand/depthwise/projection)")
+    print(f"  Last 1x1 conv: {'Analog' if LAST_CONV_IS_ANALOG else 'Digital'}")
+    print(f"  Classifier (FC): {'Analog' if CLASSIFIER_IS_ANALOG else 'Digital'}")
+    print("  Inverted residual setting (t,c,n,s):")
+    print("   " + " → ".join([f"({t},{c},{n},{s})" for (t,c,n,s) in inverted_residual_setting]) + "\n")
 
-    print(f"\nCreated ResNet18 with per-block analog/digital layer configuration:")
-    print(f"  Analog device type: LinearStepDevice (fitted from Current_LinearStepDevice_with_variation_config.json)")
-    print(f"  conv1: {'Analog (trainable base)' if input_use_analog else 'Digital (FloatingPoint)'}")
-    print(f"  Layer1:")
-    print(f"    {format_block_config('layer1_block0')}")
-    print(f"    {format_block_config('layer1_block1')}")
-    print(f"  Layer2:")
-    print(f"    {format_block_config('layer2_block0')}")
-    print(f"    {format_block_config('layer2_block1')}")
-    print(f"  Layer3:")
-    print(f"    {format_block_config('layer3_block0')}")
-    print(f"    {format_block_config('layer3_block1')}")
-    print(f"  Layer4:")
-    print(f"    {format_block_config('layer4_block0')}")
-    print(f"    {format_block_config('layer4_block1')}")
-    print(f"  fc: {'Analog (trainable base)' if fc_use_analog else 'Digital (FloatingPoint)'}")
-    print(f"  Using random initialization (no pretrained weights)\n")
-
-    # Apply Kaiming initialization to ensure consistent initialization
-    initialize_resnet_weights(model)
-
+    # Weight initialization (analog tile direct injection)
+    initialize_mobilenetv2_weights(model)
     return model
 
 
-def initialize_resnet_weights(model):
-    """Apply PyTorch ResNet-style kaiming_normal initialization to all layers.
-
-    This ensures the initialization matches standard PyTorch ResNet18 behavior
-    for consistent results across different implementations.
-
-    Args:
-        model (nn.Module): Model to initialize
-    """
+def initialize_mobilenetv2_weights(model):
+    """Apply Kaiming initialization to AnalogConv2d/AnalogLinear and BN.
+    Works generically for MobileNetV2 with depthwise conv (groups support)."""
     import math
-
-    print("\nApplying ResNet-style Kaiming initialization...")
-
+    print("\nApplying Kaiming initialization (generic)...")
     for name, module in model.named_modules():
         if isinstance(module, AnalogConv2d):
-            # For AnalogConv2d layers, initialize the analog tile weights
             if hasattr(module, 'analog_module'):
-                # Get the weight dimensions
-                if hasattr(module, 'out_channels') and hasattr(module, 'in_channels'):
-                    out_channels = module.out_channels
-                    in_channels = module.in_channels
-                    kernel_size = module.kernel_size
-
-                    # Create temporary weight tensor with correct shape for initialization
-                    if isinstance(kernel_size, tuple):
-                        k_h, k_w = kernel_size
+                # derive expected conv weight shape and init
+                out_c = getattr(module, 'out_channels', None)
+                in_c  = getattr(module, 'in_channels', None)
+                k = module.kernel_size
+                if isinstance(k, tuple):
+                    kh, kw = k
+                else:
+                    kh = kw = k
+                tmp_w = torch.empty(out_c, in_c // module.groups, kh, kw)
+                nn.init.kaiming_normal_(tmp_w, mode='fan_out', nonlinearity='relu')
+                try:
+                    w, b = module.analog_module.get_weights()
+                    if w.ndim == 2:
+                        module.analog_module.set_weights(
+                            tmp_w.view(out_c, (in_c // module.groups) * kh * kw), b
+                        )
                     else:
-                        k_h = k_w = kernel_size
-
-                    temp_weight = torch.empty(out_channels, in_channels, k_h, k_w)
-
-                    # Apply kaiming_normal initialization (ResNet default)
-                    # mode='fan_out', nonlinearity='relu' for Conv2d in ResNet
-                    nn.init.kaiming_normal_(temp_weight, mode='fan_out', nonlinearity='relu')
-
-                    # Set the initialized weights to the analog tile
-                    try:
-                        # Check if we need to reshape for analog tile format
-                        if hasattr(module.analog_module, 'get_weights'):
-                            weights, bias = module.analog_module.get_weights()
-                            weight_shape = weights.shape
-
-                            # Reshape temp_weight to match analog tile format
-                            if len(weight_shape) == 2:
-                                # Flattened format [out_ch, in_ch*k*k]
-                                reshaped_weight = temp_weight.view(out_channels, in_channels * k_h * k_w)
-                                module.analog_module.set_weights(reshaped_weight, bias)
-                            else:
-                                # Conv format [out_ch, in_ch, k, k]
-                                module.analog_module.set_weights(temp_weight, bias)
-
-                            print(f"  Initialized {name}: Conv2d({in_channels}, {out_channels}, kernel_size={kernel_size})")
-                    except Exception as e:
-                        print(f"  Warning: Could not initialize {name}: {e}")
+                        module.analog_module.set_weights(tmp_w, b)
+                    print(f"  Initialized {name}: Conv2d(groups={module.groups})")
+                except Exception as e:
+                    print(f"  Warning: init fail {name}: {e}")
 
         elif isinstance(module, nn.BatchNorm2d):
-            # BatchNorm: constant initialization (weight=1, bias=0)
             if module.weight is not None:
                 nn.init.constant_(module.weight, 1)
             if module.bias is not None:
                 nn.init.constant_(module.bias, 0)
 
         elif isinstance(module, AnalogLinear):
-            # For AnalogLinear (FC layer)
             if hasattr(module, 'analog_module') and hasattr(module.analog_module, 'get_weights'):
                 try:
-                    weights, bias = module.analog_module.get_weights()
-                    in_features = module.in_features if hasattr(module, 'in_features') else weights.shape[1]
-                    out_features = module.out_features if hasattr(module, 'out_features') else weights.shape[0]
-
-                    # Create temporary weight for initialization
-                    temp_weight = torch.empty(out_features, in_features)
-
-                    # Apply kaiming_uniform initialization for Linear layers (PyTorch default)
-                    nn.init.kaiming_uniform_(temp_weight, a=math.sqrt(5))
-
-                    # Set to analog tile
-                    module.analog_module.set_weights(temp_weight, bias)
-                    print(f"  Initialized {name}: Linear({in_features}, {out_features})")
+                    w, b = module.analog_module.get_weights()
+                    out_f, in_f = w.shape
+                    tmp_w = torch.empty(out_f, in_f)
+                    nn.init.kaiming_uniform_(tmp_w, a=math.sqrt(5))
+                    module.analog_module.set_weights(tmp_w, b)
+                    print(f"  Initialized {name}: Linear({in_f}, {out_f})")
                 except Exception as e:
-                    print(f"  Warning: Could not initialize {name}: {e}")
-
+                    print(f"  Warning: init fail {name}: {e}")
     print("Weight initialization completed\n")
 
 
@@ -717,7 +541,7 @@ def apply_warmup_cosine_lr(optimizer, epoch, total_epochs, base_lr, warmup_ratio
 
 
 def main():
-    """Train a PyTorch ResNet model with mixed analog/digital to classify CIFAR10."""
+    """Train a PyTorch MobileNetV2 model with mixed analog/digital to classify CIFAR10."""
     # Seed
     manual_seed(SEED)
 
@@ -727,8 +551,8 @@ def main():
     # Make the model
     model = create_model()
 
-    # Initialize weights with Kaiming normal (ResNet default)
-    initialize_resnet_weights(model)
+    # Initialize weights with Kaiming initialization
+    initialize_mobilenetv2_weights(model)
 
     if USE_CUDA:
         model = model.to(DEVICE)
@@ -744,7 +568,7 @@ def main():
     criterion = nn.CrossEntropyLoss()
     optimizer = create_sgd_optimizer(model, LEARNING_RATE, MOMENTUM, WEIGHT_DECAY)
 
-    print(f"\nUsing fitted PiecewiseStepDevice for analog layers (dw_min={device_config.get('dw_min', 'N/A')})")
+    print(f"\nUsing fitted LinearStepDevice for analog layers (dw_min={device_config.get('dw_min', 'N/A')})")
 
     best_accuracy = 0
     best_epoch = 0
@@ -891,7 +715,7 @@ def main():
         axes[1, 1].set_title('Generalization Gap')
         axes[1, 1].grid(True, alpha=0.3)
 
-        plt.suptitle(f'Fitted LinearStepDevice ResNet18 CIFAR10 ({N_EPOCHS} epochs) - {EXPERIMENT_NAME}\n'
+        plt.suptitle(f'Fitted LinearStepDevice MobileNetV2 CIFAR10 ({N_EPOCHS} epochs) - {EXPERIMENT_NAME}\n'
                      f'Best Val Acc: {best_accuracy:.2f}% @ Epoch {best_epoch + 1}', fontsize=14)
         plt.tight_layout()
 
@@ -924,7 +748,7 @@ def main():
             features_hook.append(output.detach().cpu())
 
         # Register hook on the flatten layer (before FC)
-        # model structure: [l0, l1, l2, l3, l4_conv, l5_fc]
+        # model structure: [l0_stem, l1_stage, l2_stage, l3_stage, l4_lastconv, l5_fc]
         # l5_fc = [AdaptiveAvgPool, Flatten, AnalogLinear]
         hook = model[5][1].register_forward_hook(hook_fn)  # Flatten layer
 
@@ -981,7 +805,7 @@ def main():
         cbar2 = plt.colorbar(scatter2, ax=axes[1], ticks=range(10))
         cbar2.ax.set_yticklabels(class_names)
 
-        plt.suptitle(f'Feature Embeddings - Fitted Device ResNet18 - {EXPERIMENT_NAME}\nVal Acc: {best_accuracy:.2f}%', fontsize=14)
+        plt.suptitle(f'Feature Embeddings - Fitted Device MobileNetV2 - {EXPERIMENT_NAME}\nVal Acc: {best_accuracy:.2f}%', fontsize=14)
         plt.tight_layout()
 
         tsne_path = os.path.join(RESULTS, f"{CONFIG_NAME}_tsne_analysis_lr{LEARNING_RATE}_{N_EPOCHS}epoch_{EXPERIMENT_NAME}.png")
@@ -1010,7 +834,7 @@ def main():
         axes[1].set_xlabel('Predicted')
         axes[1].set_ylabel('True')
 
-        plt.suptitle(f'Confusion Matrix - Fitted Device ResNet18 - {EXPERIMENT_NAME}\nVal Acc: {best_accuracy:.2f}%', fontsize=14)
+        plt.suptitle(f'Confusion Matrix - Fitted Device MobileNetV2 - {EXPERIMENT_NAME}\nVal Acc: {best_accuracy:.2f}%', fontsize=14)
         plt.tight_layout()
 
         cm_path = os.path.join(RESULTS, f"{CONFIG_NAME}_confusion_matrix_lr{LEARNING_RATE}_{N_EPOCHS}epoch_{EXPERIMENT_NAME}.png")
@@ -1045,7 +869,14 @@ def main():
         # Summary report
         summary = {
             'experiment_name': EXPERIMENT_NAME,
-            'experiment': f'Fitted LinearStepDevice ResNet18 CIFAR10 - {EXPERIMENT_NAME}',
+            'experiment': f'Fitted LinearStepDevice MobileNetV2 CIFAR10 - {EXPERIMENT_NAME}',
+            'architecture': {
+                'model': 'MobileNetV2',
+                'initial_channels': 32,
+                'final_features': 1280,
+                'inverted_residual_blocks': 17,
+                'expansion_ratios': [1, 6, 6, 6, 6, 6, 6],
+            },
             'epochs': N_EPOCHS,
             'best_val_accuracy': best_accuracy,
             'best_epoch': best_epoch + 1,
@@ -1070,7 +901,7 @@ def main():
             'per_class_accuracy': {name: float(acc) for name, acc in zip(class_names, per_class_acc)}
         }
 
-        summary_path = os.path.join(RESULTS, f"experiment_summary_{N_EPOCHS}epoch_{EXPERIMENT_NAME}.json")
+        summary_path = os.path.join(RESULTS, f"mobilenetv2_experiment_summary_{N_EPOCHS}epoch_{EXPERIMENT_NAME}.json")
         with open(summary_path, 'w') as f:
             json.dump(summary, f, indent=2)
         print(f"✓ Experiment summary saved to: {summary_path}")
